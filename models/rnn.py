@@ -37,7 +37,6 @@ class RNNLanguageModel(nn.Module):
 
         self.rnns = nn.ModuleList(_build_rnns(hyperparams))
         self.encoder = encoder
-        self._rnn_init_hidden = []
 
         self._hyperparams = hyperparams
 
@@ -58,13 +57,13 @@ class RNNLanguageModel(nn.Module):
         return outputs, hidden_n
 
     def init_hidden_layer(self, batch_size):
-        if len(self._rnn_init_hidden) == 0:
-            for rnn in self.rnns:
-                hidden_size = rnn.weight_hh_l0.size(1)
-                first_dim = 2 if self._hyperparams.bidirectional else 1
+        init_hidden = []
+        for rnn in self.rnns:
+            hidden_size = rnn.weight_hh_l0.size(1)
+            first_dim = 2 if self._hyperparams.bidirectional else 1
 
-                param_h = torch.randn(first_dim, batch_size, hidden_size)
-                param_c = torch.randn(first_dim, batch_size, hidden_size)
-                self._rnn_init_hidden.append((param_h, param_c))
+            param_h = torch.randn(first_dim, batch_size, hidden_size)
+            param_c = torch.randn(first_dim, batch_size, hidden_size)
+            init_hidden.append((param_h, param_c))
 
-        return tuple(self._rnn_init_hidden)
+        return tuple(init_hidden)
