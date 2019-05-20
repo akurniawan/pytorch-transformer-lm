@@ -3,10 +3,10 @@ import torch.optim as optim
 import torch.nn as nn
 
 from functools import reduce
-from modules.data import wikitext2
-from models.encoder import TransformerEncoder
-from modules.embedding import TransformerEmbedding, DropEmbedding
-from models.lm import TransformerLanguageModel
+from src.modules.data import wikitext103
+from src.models.encoder import TransformerEncoder
+from src.modules.embedding import TransformerEmbedding, DropEmbedding
+from src.models.lm import TransformerLanguageModel
 
 from ignite.engine import Events
 from ignite.engine import Engine
@@ -16,7 +16,7 @@ from ignite.contrib.handlers import TensorboardLogger
 from ignite.contrib.handlers.tensorboard_logger import (
     OutputHandler, OptimizerParamsHandler, WeightsHistHandler,
     GradsHistHandler)
-from criterion import lm_criterion
+from src.criterion import lm_criterion
 
 if torch.cuda.is_available():
     DEVICE = "cuda"
@@ -28,7 +28,7 @@ def train(epochs=500, batch_size=32, bptt_len=70, lr=0.00025, log_dir=None):
     ###################################################################
     # Dataset
     ###################################################################
-    wt2 = wikitext2(batch_size=batch_size, bptt_len=bptt_len)
+    wt2 = wikitext103(batch_size=batch_size, bptt_len=bptt_len)
 
     ###################################################################
     # Configs

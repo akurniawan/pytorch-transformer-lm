@@ -31,7 +31,7 @@ def wikitext2(batch_size, bptt_len):
 
 def wikitext103(batch_size, bptt_len):
     TEXT = data.Field(lower=True)
-    train, valid, test = datasets.WikiText2.splits(TEXT)
+    train, valid, test = datasets.WikiText103.splits(TEXT)
 
     if os.path.exists("./checkpoint/vocab.data"):
         TEXT.vocab = torch.load("./checkpoint/vocab.data")

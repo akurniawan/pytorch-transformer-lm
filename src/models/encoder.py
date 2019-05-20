@@ -2,8 +2,8 @@ import torch
 import math
 import torch.nn as nn
 
-from modules.attention import MultiHeadAttention
-from modules.ffn import PositionWiseFFN
+from ..modules.attention import MultiHeadAttention
+from ..modules.ffn import PositionWiseFFN
 
 from typing import NamedTuple, List
 

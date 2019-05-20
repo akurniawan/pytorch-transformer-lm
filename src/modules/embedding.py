@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 
 from typing import NamedTuple
-from models.regularization import LockedDropout
+from ..models.regularization import LockedDropout
 
 
 class DropEmbedding(nn.Module):
