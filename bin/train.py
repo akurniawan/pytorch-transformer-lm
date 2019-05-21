@@ -16,6 +16,8 @@ from ignite.contrib.handlers import TensorboardLogger
 from ignite.contrib.handlers.tensorboard_logger import (
     OutputHandler, OptimizerParamsHandler, WeightsHistHandler,
     GradsHistHandler)
+from ignite.contrib.handlers.param_scheduler import (
+    create_lr_scheduler_with_warmup, CosineAnnealingScheduler)
 from src.criterion import lm_criterion
 
 if torch.cuda.is_available():
@@ -24,7 +26,12 @@ else:
     DEVICE = "cpu"
 
 
-def train(epochs=500, batch_size=32, bptt_len=70, lr=0.00025, log_dir=None):
+def train(epochs=500,
+          batch_size=32,
+          bptt_len=70,
+          lr=0.00025,
+          log_steps=200,
+          log_dir=None):
     ###################################################################
     # Dataset
     ###################################################################
@@ -123,6 +130,15 @@ def train(epochs=500, batch_size=32, bptt_len=70, lr=0.00025, log_dir=None):
     train_engine.add_event_handler(Events.EPOCH_COMPLETED, run_eval)
 
     ###################################################################
+    # LR Scheduler
+    ###################################################################
+    cosine_scheduler = CosineAnnealingScheduler(
+        opt.param_groups[0], "lr", 0.0, 2.5e4, cycle_size=len(wt2.train_iter))
+    warmup_scheduler = create_lr_scheduler_with_warmup(cosine_scheduler, 0.0,
+                                                       2.5e4, 2000)
+    train_engine.add_event_handler(Events.ITERATION_STARTED, warmup_scheduler)
+
+    ###################################################################
     # Metrics
     ###################################################################
     RunningAverage(output_transform=lambda x: x["train_ppl"]).attach(
@@ -140,10 +156,19 @@ def train(epochs=500, batch_size=32, bptt_len=70, lr=0.00025, log_dir=None):
     # Tensorboard
     ###################################################################
     tb_logger = TensorboardLogger(log_dir="experiments")
+
+    def stepn_logger(num_steps, handler):
+        def logger_runner(engine, log_handler, event_name):
+            if engine.state.iteration % num_steps == 0:
+                handler(engine, log_handler, event_name)
+
+        return logger_runner
+
     tb_logger.attach(
         train_engine,
-        log_handler=OutputHandler(
-            tag="training", output_transform=lambda loss: loss),
+        log_handler=stepn_logger(
+            log_steps,
+            OutputHandler(tag="training", output_transform=lambda loss: loss)),
         event_name=Events.ITERATION_COMPLETED)
     tb_logger.attach(
         eval_engine,
@@ -152,18 +177,23 @@ def train(epochs=500, batch_size=32, bptt_len=70, lr=0.00025, log_dir=None):
         event_name=Events.EPOCH_COMPLETED)
     tb_logger.attach(
         train_engine,
-        log_handler=OptimizerParamsHandler(opt),
+        log_handler=stepn_logger(log_steps, OptimizerParamsHandler(opt)),
         event_name=Events.ITERATION_STARTED)
     tb_logger.attach(
         train_engine,
-        log_handler=WeightsHistHandler(model),
+        log_handler=stepn_logger(log_steps, WeightsHistHandler(model)),
         event_name=Events.EPOCH_COMPLETED)
     tb_logger.attach(
         train_engine,
-        log_handler=GradsHistHandler(model),
+        log_handler=stepn_logger(log_steps, GradsHistHandler(model)),
         event_name=Events.EPOCH_COMPLETED)
 
-    train_engine.run(wt2.train_iter, max_epochs=epochs)
+    try:
+        train_engine.run(wt2.train_iter, max_epochs=epochs)
+    except Exception:
+        pass
+    finally:
+        tb_logger.close()
 
 
 if __name__ == '__main__':
