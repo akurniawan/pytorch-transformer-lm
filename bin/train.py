@@ -31,7 +31,7 @@ def train(epochs=500,
           bptt_len=70,
           lr=0.00025,
           log_steps=200,
-          log_dir=None):
+          log_dir="experiments"):
     ###################################################################
     # Dataset
     ###################################################################
@@ -155,7 +155,7 @@ def train(epochs=500,
     ###################################################################
     # Tensorboard
     ###################################################################
-    tb_logger = TensorboardLogger(log_dir="experiments")
+    tb_logger = TensorboardLogger(log_dir=log_dir)
 
     def stepn_logger(num_steps, handler):
         def logger_runner(engine, log_handler, event_name):
