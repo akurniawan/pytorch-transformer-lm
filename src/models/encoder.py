@@ -14,7 +14,8 @@ class TransformerEncoder(nn.Module):
         Args:
             query_dim: Number of words in dictionary
             att_num_units: Number of embedding dimension
-            ffn_num_unit: Dropout probability for embedding to hidden units layer
+            ffn_num_unit: Dropout probability for embedding to
+                hidden units layer
             max_ext: Dropout probability for embedding matrix
         """
         query_dim: int = 512
