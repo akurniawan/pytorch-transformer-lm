@@ -23,9 +23,7 @@ class MultiHeadAttention(nn.Module):
 
         self._num_units = num_units
         self._h = h
-        self._key_dim = nn.Parameter(
-            torch.tensor(data=[key_dim], dtype=torch.float32),
-            requires_grad=False)
+        self._key_dim = torch.tensor(float(key_dim))
         self._dropout_p = dropout_p
         self._is_masked = is_masked
 
@@ -49,7 +47,7 @@ class MultiHeadAttention(nn.Module):
         # calculate QK^T
         attention = torch.matmul(Q, K.transpose(1, 2))
         # normalize with sqrt(dk)
-        attention = attention / torch.sqrt(self._key_dim)
+        attention = attention / self._key_dim.sqrt()
         # use masking (usually for decoder) to prevent leftward
         # information flow and retains auto-regressive property
         # as said in the paper
