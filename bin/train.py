@@ -2,6 +2,8 @@ import torch
 import torch.optim as optim
 import torch.nn as nn
 
+import numpy as np
+
 from functools import reduce
 from src.modules.data import wikitext103
 from src.models.encoder import TransformerEncoder
@@ -15,7 +17,7 @@ from ignite.contrib.handlers import ProgressBar
 from ignite.contrib.handlers import TensorboardLogger
 from ignite.contrib.handlers.tensorboard_logger import (
     OutputHandler, OptimizerParamsHandler, WeightsHistHandler,
-    GradsHistHandler)
+    GradsHistHandler, WeightsScalarHandler, GradsScalarHandler)
 from ignite.contrib.handlers.param_scheduler import (
     create_lr_scheduler_with_warmup, CosineAnnealingScheduler)
 from src.criterion import lm_criterion
@@ -42,7 +44,8 @@ def train(epochs=500,
     ###################################################################
     embedding_config = DropEmbedding.Hyperparams(
         len(wt2.text_field.vocab) + 3, ninp=512)
-    encoder_config = TransformerEncoder.Hyperparams(max_ext=128)
+    encoder_config = TransformerEncoder.Hyperparams(
+        att_num_units=[512, 512, 512, 512, 512, 512], max_ext=128)
 
     ###################################################################
     # Models
@@ -112,7 +115,7 @@ def train(epochs=500,
             raw_loss = criterion(out.view(-1, out.size(2)), target.view(-1))
             loss = raw_loss[1]
 
-            return {"val_loss": loss.item(), "val_ppl": loss.exp().item()}
+            return {"val_loss": loss.item()}
 
     train_engine = Engine(train_step)
     eval_engine = Engine(eval_step)
@@ -124,7 +127,7 @@ def train(epochs=500,
         eval_engine.run(wt2.valid_iter)
         metrics = eval_engine.state.metrics
         print("Validation loss: ", metrics["val_loss"], ", ppl: ",
-              metrics["val_ppl"])
+              np.exp(metrics["val_loss"]))
 
     train_engine.add_event_handler(Events.EPOCH_STARTED, reset_state)
     train_engine.add_event_handler(Events.EPOCH_COMPLETED, run_eval)
@@ -133,9 +136,9 @@ def train(epochs=500,
     # LR Scheduler
     ###################################################################
     cosine_scheduler = CosineAnnealingScheduler(
-        opt.param_groups[0], "lr", 0.0, 2.5e4, cycle_size=len(wt2.train_iter))
+        opt.param_groups[0], "lr", 0.0, 2.5e-4, cycle_size=len(wt2.train_iter))
     warmup_scheduler = create_lr_scheduler_with_warmup(cosine_scheduler, 0.0,
-                                                       2.5e4, 2000)
+                                                       2.5e-4, 2000)
     train_engine.add_event_handler(Events.ITERATION_STARTED, warmup_scheduler)
 
     ###################################################################
@@ -145,8 +148,6 @@ def train(epochs=500,
         train_engine, "train_ppl")
     RunningAverage(output_transform=lambda x: x["train_loss"]).attach(
         train_engine, "train_loss")
-    RunningAverage(output_transform=lambda x: x["val_ppl"]).attach(
-        eval_engine, "val_ppl")
     RunningAverage(output_transform=lambda x: x["val_loss"]).attach(
         eval_engine, "val_loss")
     progress_bar = ProgressBar(persist=True)
@@ -173,7 +174,9 @@ def train(epochs=500,
     tb_logger.attach(
         eval_engine,
         log_handler=OutputHandler(
-            tag="validation", output_transform=lambda loss: loss),
+            tag="validation",
+            output_transform=lambda loss: loss,
+            another_engine=train_engine),
         event_name=Events.EPOCH_COMPLETED)
     tb_logger.attach(
         train_engine,
@@ -181,12 +184,20 @@ def train(epochs=500,
         event_name=Events.ITERATION_STARTED)
     tb_logger.attach(
         train_engine,
-        log_handler=stepn_logger(log_steps, WeightsHistHandler(model)),
-        event_name=Events.EPOCH_COMPLETED)
+        log_handler=stepn_logger(log_steps, WeightsScalarHandler(model)),
+        event_name=Events.ITERATION_COMPLETED)
     tb_logger.attach(
         train_engine,
-        log_handler=stepn_logger(log_steps, GradsHistHandler(model)),
-        event_name=Events.EPOCH_COMPLETED)
+        log_handler=stepn_logger(log_steps, GradsScalarHandler(model)),
+        event_name=Events.ITERATION_COMPLETED)
+    tb_logger.attach(
+        train_engine,
+        log_handler=stepn_logger(500, WeightsHistHandler(model)),
+        event_name=Events.ITERATION_COMPLETED)
+    tb_logger.attach(
+        train_engine,
+        log_handler=stepn_logger(500, GradsHistHandler(model)),
+        event_name=Events.ITERATION_COMPLETED)
 
     try:
         train_engine.run(wt2.train_iter, max_epochs=epochs)
