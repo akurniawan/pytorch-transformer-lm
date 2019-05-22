@@ -14,7 +14,8 @@ def lm_criterion(in_features, vocab_size):
 
     splits = []
     if vocab_size > _MEDIUM_TOKENS:
-        splits = [2800, 20000, 760000]
+        # splits = [2800, 20000, 760000]
+        splits = [2800, 20000]
     elif vocab_size > _HIGH_TOKENS:
         splits = [4200, 35000, 180000]
     splits += [vocab_size - 2]
