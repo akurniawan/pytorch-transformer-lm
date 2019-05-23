@@ -23,16 +23,24 @@ class MultiHeadAttention(nn.Module):
 
         self._num_units = num_units
         self._h = h
-        self._key_dim = torch.tensor(float(key_dim))
+        self._key_dim = float(key_dim)**-0.5
         self._dropout_p = dropout_p
         self._is_masked = is_masked
 
         self.query_layer = nn.Linear(query_dim, num_units, bias=False)
         self.key_layer = nn.Linear(key_dim, num_units, bias=False)
         self.value_layer = nn.Linear(key_dim, num_units, bias=False)
-        self.bn = nn.BatchNorm1d(num_units)
+        self.ln = nn.LayerNorm(query_dim)
 
     def forward(self, query, keys):
+        """
+        Args:
+            query (torch.Tensor): [seq_len, batch, embed_dim]
+            keys (torch.Tensor): [seq_len, batch, embed_dim]
+
+        Returns:
+            torch.Tensor: [seq_len, batch, embed_dim]
+        """
         Q = self.query_layer(query)
         K = self.key_layer(keys)
         V = self.value_layer(keys)
@@ -45,9 +53,9 @@ class MultiHeadAttention(nn.Module):
         V = torch.cat(V.split(split_size=chunk_size, dim=2), dim=0)
 
         # calculate QK^T
-        attention = torch.matmul(Q, K.transpose(1, 2))
+        attention = torch.bmm(Q, K.transpose(1, 2))
         # normalize with sqrt(dk)
-        attention = attention / self._key_dim.sqrt()
+        attention = attention * self._key_dim
         # use masking (usually for decoder) to prevent leftward
         # information flow and retains auto-regressive property
         # as said in the paper
@@ -66,17 +74,18 @@ class MultiHeadAttention(nn.Module):
         # put it to softmax
         attention = F.softmax(attention, dim=-1)
         # apply dropout
-        attention = F.dropout(attention, self._dropout_p)
+        attention = F.dropout(
+            attention, p=self._dropout_p, training=self.training)
         # multiplyt it with V
-        attention = torch.matmul(attention, V)
+        attention = torch.bmm(attention, V)
         # convert attention back to its input original size
         restore_chunk_size = int(attention.size(0) / self._h)
         attention = torch.cat(
             attention.split(split_size=restore_chunk_size, dim=0), dim=2)
         # residual connection
         attention += query
-        # apply batch normalization
-        attention = self.bn(attention.transpose(1, 2)).transpose(1, 2)
+        # apply layer normalization
+        attention = self.ln(attention)
 
         return attention
 
