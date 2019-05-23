@@ -97,6 +97,9 @@ class WordCharCNNEmbedding(nn.Module):
                 embedding and Conv layer
             kernel_size: The size of the convolutional layer kernel
             out_channels: Number of final embedding of the characters
+            target_emb: The size of the embedding after being applied
+                to projection layer
+            use_highway: Flag to use highway connection after projection
         """
         ntokens: int
         char_embedding_dim: int = 30
@@ -104,23 +107,30 @@ class WordCharCNNEmbedding(nn.Module):
         dropout: float = 0.5
         kernel_size: int = 3
         out_channels: int = 30
+        target_emb: int = 300
+        use_highway: bool = False
 
-    def __init__(self, char_cnn_params: Hyperparams):
+    def __init__(self, params: Hyperparams):
         super(WordCharCNNEmbedding, self).__init__()
-        self._params = char_cnn_params
+        self._params = params
+        self._use_highway = params.use_highway
 
-        self.char_embedding = nn.Embedding(char_cnn_params.ntokens,
-                                           char_cnn_params.char_embedding_dim,
-                                           char_cnn_params.char_padding_idx)
+        if self._use_highway and params.out_channels != params.target_emb:
+            raise ValueError("out_channels and target_emb must be "
+                             "equal in highway setting")
+
+        self.char_embedding = nn.Embedding(
+            params.ntokens, params.char_embedding_dim, params.char_padding_idx)
         self.conv_embedding = nn.Sequential(
-            nn.Dropout(p=char_cnn_params.dropout),
+            nn.Dropout(p=params.dropout),
             nn.Conv1d(
-                in_channels=char_cnn_params.char_embedding_dim,
-                out_channels=char_cnn_params.out_channels,
-                kernel_size=char_cnn_params.kernel_size,
-                padding=char_cnn_params.kernel_size - 1),
-            nn.AdaptiveMaxPool1d(1))
-        self.out_dropout = nn.Dropout(p=char_cnn_params.dropout)
+                in_channels=params.char_embedding_dim,
+                out_channels=params.out_channels,
+                kernel_size=params.kernel_size,
+                padding=params.kernel_size - 1), nn.AdaptiveMaxPool1d(1))
+        self.proj_layer = TimeDistributed(
+            nn.Linear(params.out_channels, params.target_emb))
+        self.out_dropout = nn.Dropout(p=params.dropout)
 
     def init_weights(self):
         """Initialize the weight of character embedding with xavier
@@ -160,8 +170,13 @@ class WordCharCNNEmbedding(nn.Module):
         char_embedding_vec = char_embedding_vec.view(
             chars.size(0), chars.size(1), -1).contiguous()
         char_embedding_vec = self.out_dropout(char_embedding_vec)
+        proj_char_embedding_vec = self.proj_layer(char_embedding_vec)
+        # Apply highway connection between projection layer and
+        # pooling layer
+        if self._use_highway:
+            proj_char_embedding_vec += char_embedding_vec
 
-        return char_embedding_vec
+        return proj_char_embedding_vec
 
 
 class TransformerEmbedding(nn.Module):
