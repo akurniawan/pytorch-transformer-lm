@@ -8,6 +8,7 @@ from torch.nn.parameter import Parameter
 
 from typing import NamedTuple
 from ..models.regularization import LockedDropout
+from ..modules.time_distributed import TimeDistributed
 
 
 class DropEmbedding(nn.Module):
