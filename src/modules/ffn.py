@@ -17,19 +17,17 @@ class PositionWiseFFN(nn.Module):
     def __init__(self, feature_size, num_units=2048, dropout=0.1):
         super(PositionWiseFFN, self).__init__()
         self._dropout = dropout
-        self.ffn = self._build_ffn(feature_size, num_units)
-
-    def _build_ffn(self, feature_size, num_units):
-        model = nn.Sequential(
+        self.ffn = nn.Sequential(
             nn.Linear(feature_size, num_units), Gelu(),
             nn.Dropout(self._dropout), nn.Linear(num_units, feature_size),
             nn.Dropout(self._dropout))
-        return model
+        self.ln = nn.LayerNorm(feature_size)
 
     def forward(self, X):
         ffn = self.ffn(X)
         # residual network
         ffn += X
+        ffn = self.ln(ffn)
 
         return ffn
 
