@@ -5,6 +5,7 @@ from collections import namedtuple
 
 from torchtext import data
 from torchtext import datasets
+from .iterator import BPTTIterator
 
 _LMDataReturn = namedtuple(
     "WikiTextReturn", ["train_iter", "valid_iter", "test_iter", "text_field"])
@@ -18,9 +19,9 @@ def wikitext2(batch_size, bptt_len):
         TEXT.vocab = torch.load("./checkpoint/vocab.data")
     else:
         TEXT.build_vocab(train)
-        torch.save(TEXT.vocab, "./checkpoint/vocab.data")
+        # torch.save(TEXT.vocab, "./checkpoint/vocab.data")
 
-    train_iter, valid_iter, test_iter = data.BPTTIterator.splits(
+    train_iter, valid_iter, test_iter = BPTTIterator.splits(
         (train, valid, test),
         batch_size=batch_size,
         bptt_len=bptt_len,
@@ -37,7 +38,7 @@ def wikitext103(batch_size, bptt_len):
         TEXT.vocab = torch.load("./checkpoint/vocab.data")
     else:
         TEXT.build_vocab(train)
-        torch.save(TEXT.vocab, "./checkpoint/vocab.data")
+        # torch.save(TEXT.vocab, "./checkpoint/vocab.data")
 
     train_iter, valid_iter, test_iter = data.BPTTIterator.splits(
         (train, valid, test),
