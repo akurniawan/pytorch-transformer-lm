@@ -18,9 +18,8 @@ class PositionWiseFFN(nn.Module):
         super(PositionWiseFFN, self).__init__()
         self._dropout = dropout
         self.ffn = nn.Sequential(
-            nn.Linear(feature_size, num_units), Gelu(),
-            nn.Dropout(self._dropout), nn.Linear(num_units, feature_size),
-            nn.Dropout(self._dropout))
+            nn.Linear(feature_size, num_units), nn.ReLU(),
+            nn.Linear(num_units, feature_size))
         self.ln = nn.LayerNorm(feature_size)
 
     def forward(self, X):
