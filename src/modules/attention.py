@@ -8,7 +8,7 @@ class MultiHeadAttention(nn.Module):
                  query_dim,
                  key_dim,
                  num_units,
-                 dropout_p=0.1,
+                 dropout_p=0.5,
                  h=8,
                  is_masked=False):
         super(MultiHeadAttention, self).__init__()
@@ -30,6 +30,7 @@ class MultiHeadAttention(nn.Module):
         self.query_layer = nn.Linear(query_dim, num_units, bias=False)
         self.key_layer = nn.Linear(key_dim, num_units, bias=False)
         self.value_layer = nn.Linear(key_dim, num_units, bias=False)
+        self.proj_layer = nn.Linear(num_units, num_units)
         self.ln = nn.LayerNorm(query_dim)
 
     def forward(self, query, keys):
@@ -45,12 +46,14 @@ class MultiHeadAttention(nn.Module):
         K = self.key_layer(keys)
         V = self.value_layer(keys)
 
+        batch_size = query.size(0)
+        seq_len = query.size(1)
         # split each Q, K and V into h different values from dim 2
         # and then merge them back together in dim 0
         chunk_size = int(self._num_units / self._h)
-        Q = torch.cat(Q.split(split_size=chunk_size, dim=2), dim=0)
-        K = torch.cat(K.split(split_size=chunk_size, dim=2), dim=0)
-        V = torch.cat(V.split(split_size=chunk_size, dim=2), dim=0)
+        Q = Q.view(batch_size * self._h, seq_len, chunk_size)
+        K = K.view(batch_size * self._h, -1, chunk_size)
+        V = V.view(batch_size * self._h, -1, chunk_size)
 
         # calculate QK^T
         attention = torch.bmm(Q, K.transpose(1, 2))
@@ -79,9 +82,11 @@ class MultiHeadAttention(nn.Module):
         # multiplyt it with V
         attention = torch.bmm(attention, V)
         # convert attention back to its input original size
-        restore_chunk_size = int(attention.size(0) / self._h)
-        attention = torch.cat(
-            attention.split(split_size=restore_chunk_size, dim=0), dim=2)
+        attention = attention.view(batch_size, seq_len, -1)
+
+        # apply  projection
+        attention = self.proj_layer(attention.view(-1, attention.size(-1)))
+        attention = attention.view(batch_size, seq_len, -1)
         # residual connection
         attention += query
         # apply layer normalization
@@ -93,3 +98,4 @@ class MultiHeadAttention(nn.Module):
         nn.init.uniform_(self.query_layer.weight, -0.1, 0.1)
         nn.init.uniform_(self.key_layer.weight, -0.1, 0.1)
         nn.init.uniform_(self.value_layer.weight, -0.1, 0.1)
+        nn.init.uniform_(self.proj_layer.weight, -0.1, 0.1)
