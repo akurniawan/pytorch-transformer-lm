@@ -6,6 +6,7 @@ import numpy as np
 
 from functools import reduce
 from src.modules.data import wikitext103
+# from src.modules.data import wikitext2
 from src.models.encoder import TransformerEncoder
 from src.modules.embedding import TransformerEmbedding, DropEmbedding
 from src.models.lm import TransformerLanguageModel
@@ -33,19 +34,21 @@ def train(epochs=500,
           bptt_len=70,
           lr=0.00025,
           log_steps=200,
+          clip_grad=0.25,
           log_dir="experiments"):
     ###################################################################
     # Dataset
     ###################################################################
-    wt2 = wikitext103(batch_size=batch_size, bptt_len=bptt_len)
+    wt = wikitext103(batch_size=batch_size, bptt_len=bptt_len)
+    # wt = wikitext2(batch_size=batch_size, bptt_len=bptt_len)
 
     ###################################################################
     # Configs
     ###################################################################
     embedding_config = DropEmbedding.Hyperparams(
-        len(wt2.text_field.vocab) + 3, ninp=512)
+        len(wt.text_field.vocab) + 3, ninp=512)
     encoder_config = TransformerEncoder.Hyperparams(
-        att_num_units=[512, 512, 512, 512, 512, 512], max_ext=128)
+        att_num_units=[512, 512, 512, 512, 512, 512], max_ext=384)
 
     ###################################################################
     # Models
@@ -55,7 +58,7 @@ def train(epochs=500,
         embedding=base_embedding,
         max_length=bptt_len,
         embedding_size=embedding_config.ninp,
-        use_positional_embedding=True)
+        use_positional_embedding=False)
     encoder = TransformerEncoder(encoder_config)
     model = TransformerLanguageModel(embedding, encoder)
     model.init_weight()
@@ -65,7 +68,7 @@ def train(epochs=500,
     ###################################################################
     criterion = lm_criterion(
         in_features=encoder_config.att_num_units[-1],
-        vocab_size=len(wt2.text_field.vocab))
+        vocab_size=len(wt.text_field.vocab))
 
     ###################################################################
     # Parameters + Train ops
@@ -95,7 +98,7 @@ def train(epochs=500,
         loss = raw_loss[1]
 
         loss.backward()
-        nn.utils.clip_grad_norm_(parameters, 1)
+        nn.utils.clip_grad_norm_(parameters, clip_grad)
         opt.step()
 
         return {"train_loss": loss.item(), "train_ppl": loss.exp().item()}
@@ -124,7 +127,8 @@ def train(epochs=500,
         engine.state.train_past = None
 
     def run_eval(_):
-        eval_engine.run(wt2.valid_iter)
+        print("start running eval")
+        eval_engine.run(wt.valid_iter)
         metrics = eval_engine.state.metrics
         print("Validation loss: ", metrics["val_loss"], ", ppl: ",
               np.exp(metrics["val_loss"]))
@@ -136,9 +140,9 @@ def train(epochs=500,
     # LR Scheduler
     ###################################################################
     cosine_scheduler = CosineAnnealingScheduler(
-        opt.param_groups[0], "lr", 0.0, 2.5e-4, cycle_size=len(wt2.train_iter))
+        opt.param_groups[0], "lr", 0.0, 2.5e-4, cycle_size=len(wt.train_iter))
     warmup_scheduler = create_lr_scheduler_with_warmup(cosine_scheduler, 0.0,
-                                                       2.5e-4, 2000)
+                                                       2.5e-4, 200)
     train_engine.add_event_handler(Events.ITERATION_STARTED, warmup_scheduler)
 
     ###################################################################
@@ -152,6 +156,8 @@ def train(epochs=500,
         eval_engine, "val_loss")
     progress_bar = ProgressBar(persist=True)
     progress_bar.attach(train_engine, ["train_ppl", "train_loss"])
+    progress_bar_val = ProgressBar(persist=True)
+    progress_bar_val.attach(eval_engine, ["val_loss"])
 
     ###################################################################
     # Tensorboard
@@ -200,7 +206,7 @@ def train(epochs=500,
         event_name=Events.ITERATION_COMPLETED)
 
     try:
-        train_engine.run(wt2.train_iter, max_epochs=epochs)
+        train_engine.run(wt.train_iter, max_epochs=epochs)
     except Exception:
         pass
     finally:
