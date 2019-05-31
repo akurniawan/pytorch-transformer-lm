@@ -8,7 +8,7 @@ class MultiHeadAttention(nn.Module):
                  query_dim,
                  key_dim,
                  num_units,
-                 dropout_p=0.5,
+                 dropout_p=0.1,
                  h=8,
                  is_masked=False):
         super(MultiHeadAttention, self).__init__()
