@@ -45,11 +45,11 @@ class TransformerEncoder(nn.Module):
     def forward(self, query, past=None):
         out = None
         curr_past = []
-        for layer_id, dec in enumerate(self.encoder):
+        for layer_id, enc in enumerate(self.encoder):
             this_past = None if past is None else past[layer_id]
             keys = self._update_keys(this_past, query)
-            res1 = dec[0](query, keys)
-            res2 = dec[1](res1)
+            res1 = enc[0](query, keys)
+            res2 = enc[1](res1)
             query = res2
             out = res2
 
