@@ -33,7 +33,7 @@ class MultiHeadAttention(nn.Module):
         self.proj_layer = nn.Linear(num_units, num_units)
         self.ln = nn.LayerNorm(query_dim)
 
-    def forward(self, query, keys):
+    def forward(self, query, keys, past=None):
         """
         Args:
             query (torch.Tensor): [seq_len, batch, embed_dim]
@@ -54,6 +54,10 @@ class MultiHeadAttention(nn.Module):
         Q = Q.view(batch_size * self._h, seq_len, chunk_size)
         K = K.view(batch_size * self._h, -1, chunk_size)
         V = V.view(batch_size * self._h, -1, chunk_size)
+
+        # Update KV by adding past memory if any
+        K = self._add_past(K, past)
+        V = self._add_past(V, past)
 
         # calculate QK^T
         attention = torch.bmm(Q, K.transpose(1, 2))
@@ -93,6 +97,13 @@ class MultiHeadAttention(nn.Module):
         attention = self.ln(attention)
 
         return attention
+
+    def _add_past(self, query, past):
+        if past is not None:
+            keys = torch.cat([past, query], dim=1)
+        else:
+            keys = query
+        return keys
 
     def init_weight(self):
         nn.init.uniform_(self.query_layer.weight, -0.1, 0.1)

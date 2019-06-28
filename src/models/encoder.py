@@ -47,8 +47,7 @@ class TransformerEncoder(nn.Module):
         curr_past = []
         for layer_id, enc in enumerate(self.encoder):
             this_past = None if past is None else past[layer_id]
-            keys = self._update_keys(this_past, query)
-            res1 = enc[0](query, keys)
+            res1 = enc[0](query, query, this_past)
             res2 = enc[1](res1)
             query = res2
             out = res2
@@ -57,13 +56,6 @@ class TransformerEncoder(nn.Module):
             curr_past.append(new_past)
 
         return out, curr_past
-
-    def _update_keys(self, past, query):
-        if past is not None:
-            keys = torch.cat([past, query], dim=1)
-        else:
-            keys = query
-        return keys
 
     def _update_past(self, past, out):
         with torch.no_grad():
