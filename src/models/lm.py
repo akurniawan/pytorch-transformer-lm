@@ -79,7 +79,7 @@ class TransformerLanguageModel(nn.Module):
 
     def forward(self, words, past=None):
         emb = self.embedding(words)
-        out, past = self.encoder(emb, past)
+        out, past = self.encoder(emb)
         if self.decoder:
             out = self.decoder(out)
 

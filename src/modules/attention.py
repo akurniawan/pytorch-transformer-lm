@@ -8,7 +8,7 @@ class MultiHeadAttention(nn.Module):
                  query_dim,
                  key_dim,
                  num_units,
-                 dropout_p=0.1,
+                 dropout_p=0.5,
                  h=8,
                  is_masked=False):
         super(MultiHeadAttention, self).__init__()
@@ -41,6 +41,7 @@ class MultiHeadAttention(nn.Module):
 
         Returns:
             torch.Tensor: [seq_len, batch, embed_dim]
+            Tuple: (K, V)
         """
         Q = self.query_layer(query)
         K = self.key_layer(keys)
@@ -55,9 +56,11 @@ class MultiHeadAttention(nn.Module):
         K = K.view(batch_size * self._h, -1, chunk_size)
         V = V.view(batch_size * self._h, -1, chunk_size)
 
-        # Update KV by adding past memory if any
-        K = self._add_past(K, past)
-        V = self._add_past(V, past)
+        kv_past = (K, V)
+        if past is not None:
+            # Update KV by adding past memory if any
+            K = self._add_past(K, past[0])
+            V = self._add_past(V, past[1])
 
         # calculate QK^T
         attention = torch.bmm(Q, K.transpose(1, 2))
@@ -96,13 +99,10 @@ class MultiHeadAttention(nn.Module):
         # apply layer normalization
         attention = self.ln(attention)
 
-        return attention
+        return attention, kv_past
 
     def _add_past(self, query, past):
-        if past is not None:
-            keys = torch.cat([past, query], dim=1)
-        else:
-            keys = query
+        keys = torch.cat([past, query], dim=1)
         return keys
 
     def init_weight(self):

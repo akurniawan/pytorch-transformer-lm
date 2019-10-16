@@ -1,0 +1,11 @@
+embedding:
+  class: "src.modules.embedding.WordCharCNNEmbedding"
+  params:
+    ntokens: 0
+    char_embedding_dim: 30
+    char_padding_idx: 1
+    dropout: 0.5
+    kernel_size: 3
+    out_channels: 30
+    target_emb: 300
+    use_highway: False

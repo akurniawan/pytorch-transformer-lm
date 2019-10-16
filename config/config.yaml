@@ -1,0 +1,20 @@
+train:
+  epochs: 500
+  batch_size: 32
+  bptt_len: 70
+  lr: 0.001
+  log_steps: 1
+  clip_grad: 1
+  log_dir: "experiments"
+
+encoder:
+  query_dim: 512
+  att_num_units: [512, 512, 512]
+  ffn_num_unit: 2048
+  max_ext: 384
+
+dataset:
+  name: "torchtext.datasets.WikiText2"
+
+defaults:
+  - embedding: "word_cnn_embedding"

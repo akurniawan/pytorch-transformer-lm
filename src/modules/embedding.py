@@ -27,14 +27,16 @@ class DropEmbedding(nn.Module):
         dropoute: float = 0.1
         scale: float = 0.0
 
-    def __init__(self, params: Hyperparams):
+    # def __init__(self, params: Hyperparams):
+    def __init__(self, ntokens: int, ninp: int, padding_idx: int,
+                 dropouti: float, dropoute: float, scale: float):
         super(DropEmbedding, self).__init__()
 
-        self.embedding = nn.Embedding(
-            params.ntokens, params.ninp, padding_idx=params.padding_idx)
-        self.dropout = params.dropoute
-        self.scale = torch.tensor(params.scale)
-        self.vocab_size = params.ntokens
+        self.embedding = nn.Embedding(ntokens, ninp, padding_idx=padding_idx)
+        self.dropout = dropoute
+        self.scale = torch.tensor(scale)
+        self.vocab_size = ntokens
+        self.embedding_size = ninp
 
         # Embedding parameters
         self.max_norm = self.embedding.max_norm
@@ -42,7 +44,7 @@ class DropEmbedding(nn.Module):
         self.scale_grad_by_freq = self.embedding.scale_grad_by_freq
         self.sparse = self.embedding.sparse
 
-        self.lock_dropout = LockedDropout(params.dropouti)
+        self.lock_dropout = LockedDropout(dropouti)
 
     def forward(self, X):
         if self.dropout:
@@ -87,7 +89,6 @@ class WordCharCNNEmbedding(nn.Module):
     """The character embedding is built upon CNN and pooling layer
     with dropout applied before the convolution and after the pooling.
     """
-
     class Hyperparams(NamedTuple):
         """Char CNN Hyperparameters
         Args:
@@ -111,27 +112,29 @@ class WordCharCNNEmbedding(nn.Module):
         target_emb: int = 300
         use_highway: bool = False
 
-    def __init__(self, params: Hyperparams):
+    def __init__(self, ntokens: int, char_embedding_dim: int,
+                 char_padding_idx: int, dropout: float, kernel_size: int,
+                 out_channels: int, target_emb: int, use_highway: bool):
         super(WordCharCNNEmbedding, self).__init__()
-        self._params = params
-        self._use_highway = params.use_highway
+        self._use_highway = use_highway
+        self._char_padding_idx = char_padding_idx
+        self.embedding_size = out_channels
 
-        if self._use_highway and params.out_channels != params.target_emb:
+        if self._use_highway and out_channels != target_emb:
             raise ValueError("out_channels and target_emb must be "
                              "equal in highway setting")
 
-        self.char_embedding = nn.Embedding(
-            params.ntokens, params.char_embedding_dim, params.char_padding_idx)
+        print("asdfsadf", ntokens)
+        self.char_embedding = nn.Embedding(ntokens, char_embedding_dim,
+                                           char_padding_idx)
         self.conv_embedding = nn.Sequential(
-            nn.Dropout(p=params.dropout),
-            nn.Conv1d(
-                in_channels=params.char_embedding_dim,
-                out_channels=params.out_channels,
-                kernel_size=params.kernel_size,
-                padding=params.kernel_size - 1), nn.AdaptiveMaxPool1d(1))
-        self.proj_layer = TimeDistributed(
-            nn.Linear(params.out_channels, params.target_emb))
-        self.out_dropout = nn.Dropout(p=params.dropout)
+            nn.Dropout(p=dropout),
+            nn.Conv1d(in_channels=char_embedding_dim,
+                      out_channels=out_channels,
+                      kernel_size=kernel_size,
+                      padding=kernel_size - 1), nn.AdaptiveMaxPool1d(1))
+        self.proj_layer = TimeDistributed(nn.Linear(out_channels, target_emb))
+        self.out_dropout = nn.Dropout(p=dropout)
 
     def init_weights(self):
         """Initialize the weight of character embedding with xavier
@@ -140,8 +143,7 @@ class WordCharCNNEmbedding(nn.Module):
 
         self.char_embedding.weight.data.uniform_(-0.1, 0.1)
         # Reinitialize vectors at padding_idx to have 0 value
-        self.char_embedding.weight.data[
-            self._params.char_padding_idx].uniform_(0, 0)
+        self.char_embedding.weight.data[self._char_padding_idx].uniform_(0, 0)
 
     def forward(self, chars):
         """Run the forward calculation of the char-cnn embedding
@@ -168,8 +170,9 @@ class WordCharCNNEmbedding(nn.Module):
         char_embedding_vec = self.conv_embedding(char_embedding_vec)
         char_embedding_vec = char_embedding_vec.squeeze(-1)
         # Revert the size back to [seq_len, batch, out_channel]
-        char_embedding_vec = char_embedding_vec.view(
-            chars.size(0), chars.size(1), -1).contiguous()
+        char_embedding_vec = char_embedding_vec.view(chars.size(0),
+                                                     chars.size(1),
+                                                     -1).contiguous()
         char_embedding_vec = self.out_dropout(char_embedding_vec)
         proj_char_embedding_vec = self.proj_layer(char_embedding_vec)
         # Apply highway connection between projection layer and

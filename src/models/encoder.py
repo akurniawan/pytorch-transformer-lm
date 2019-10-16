@@ -1,34 +1,28 @@
 import torch
-import math
 import torch.nn as nn
 
 from ..modules.attention import MultiHeadAttention
 from ..modules.ffn import PositionWiseFFN
 
-from typing import NamedTuple, List
+from typing import List
 
 
 class TransformerEncoder(nn.Module):
-    class Hyperparams(NamedTuple):
-        """
-        Args:
-            query_dim: Number of words in dictionary
-            att_num_units: Number of embedding dimension
-            ffn_num_unit: Dropout probability for embedding to
-                hidden units layer
-            max_ext: Dropout probability for embedding matrix
-        """
-        query_dim: int = 512
-        att_num_units: List[int] = [512, 512, 512]
-        ffn_num_unit: int = 2048
-        max_ext: float = math.inf
-
-    def __init__(self, params):
+    """
+    Args:
+        query_dim: Number of words in dictionary
+        att_num_units: Number of embedding dimension
+        ffn_num_unit: Dropout probability for embedding to
+            hidden units layer
+        max_ext: Dropout probability for embedding matrix
+    """
+    def __init__(self, query_dim: int, att_num_units: List[int],
+                 ffn_num_unit: int, max_ext: float):
         super(TransformerEncoder, self).__init__()
 
-        self.encoder = self._build_model(
-            params.query_dim, params.att_num_units, params.ffn_num_unit)
-        self._max_ext = params.max_ext
+        self.encoder = self._build_model(query_dim, att_num_units,
+                                         ffn_num_unit)
+        self._max_ext = max_ext
 
     def _build_model(self, query_dim, att_num_units, ffn_num_unit):
         layers = []
@@ -42,35 +36,39 @@ class TransformerEncoder(nn.Module):
 
         return nn.ModuleList(layers)
 
-    def forward(self, query, past=None):
+    def forward(self, query):
         out = None
         curr_past = []
+        past = None
         for layer_id, enc in enumerate(self.encoder):
             this_past = None if past is None else past[layer_id]
-            res1 = enc[0](query, query, this_past)
+            res1, model_past = enc[0](query, query, this_past)
             res2 = enc[1](res1)
             query = res2
             out = res2
 
-            new_past = self._update_past(this_past, out)
-            curr_past.append(new_past)
+            # new_past = self._update_past(this_past, model_past)
+            # curr_past.append(new_past)
 
         return out, curr_past
 
     def _update_past(self, past, out):
         with torch.no_grad():
             if past is not None:
-                keys = torch.cat([past, out], dim=1)
+                k_past = torch.cat([past[0], out[0]], dim=1)
+                v_past = torch.cat([past[1], out[1]], dim=1)
                 # truncate the length
-                seq_len = keys.size(1)
+                seq_len = k_past.size(1)
                 if self._max_ext - seq_len < 0:
                     trunc_start_idx = abs(self._max_ext - seq_len) - 1
                 else:
                     trunc_start_idx = 0
-                keys = keys[:, trunc_start_idx:, :]
+                k_past = k_past[:, trunc_start_idx:, :]
+                v_past = v_past[:, trunc_start_idx:, :]
             else:
-                keys = out
-            return keys.detach()
+                k_past = out[0]
+                v_past = out[1]
+            return (k_past.detach(), v_past.detach())
 
     def init_weight(self):
         for layer in self.encoder:
